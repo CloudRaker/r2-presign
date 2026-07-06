@@ -77,7 +77,9 @@ async function presign(method: 'GET' | 'PUT', args: PresignR2GetOptions): Promis
 
   const canonicalQuery = [...url.searchParams]
     .map(([k, v]) => [rfc3986(encodeURIComponent(k)), rfc3986(encodeURIComponent(v))])
-    .toSorted((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0))
+    .toSorted((a, b) =>
+      a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0,
+    )
     .map(([k, v]) => `${k}=${v}`)
     .join('&')
 
