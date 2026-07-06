@@ -10,6 +10,21 @@
     "sigv4"
   ],
   "license": "ISC",
+  "author": "CloudRaker",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CloudRaker/r2-presign.git"
+  },
+  "bugs": {
+    "url": "https://github.com/CloudRaker/r2-presign/issues"
+  },
+  "homepage": "https://github.com/CloudRaker/r2-presign#readme",
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "dist"
   ],
