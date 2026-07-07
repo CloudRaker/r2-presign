@@ -5,6 +5,6 @@
   "compilerOptions": {
     "types": ["node", "../worker-configuration.d.ts", "@cloudflare/vitest-pool-workers"]
   },
-  "include": ["r2-presign.e2e.test.ts", "../src/**/*"],
+  "include": ["*.e2e.test.ts", "../src/**/*"],
   "exclude": []
 }

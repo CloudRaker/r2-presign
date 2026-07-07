@@ -1,6 +1,6 @@
 import { AwsClient } from 'aws4fetch'
 import { afterAll, describe, expect, it } from 'vitest'
-import { presignR2Get, presignR2Put } from '../src/r2-presign'
+import { presignR2 } from '../src/r2-presign'
 
 describe('e2e: presign round-trip', () => {
   const key = `e2e-test/${Date.now()}.txt`
@@ -21,17 +21,17 @@ describe('e2e: presign round-trip', () => {
   // No creds passed — exercises the env fallback (process.env via nodejs_compat).
   it('PUT then GET returns same content', async () => {
     // Enforce the type: the upload must send this exact Content-Type or R2 403s.
-    const put = await presignR2Put({ key, contentType: 'text/plain', expiresInSeconds: 300 })
+    const putUrl = await presignR2('PUT', { key, contentType: 'text/plain', expiresInSeconds: 300 })
 
-    const putRes = await fetch(put.url, {
+    const putRes = await fetch(putUrl, {
       method: 'PUT',
       headers: { 'Content-Type': 'text/plain' },
       body,
     })
     expect(putRes.ok).toBe(true)
 
-    const get = await presignR2Get({ key, expiresInSeconds: 300 })
-    const getRes = await fetch(get.url)
+    const getUrl = await presignR2('GET', { key, expiresInSeconds: 300 })
+    const getRes = await fetch(getUrl)
     expect(getRes.ok).toBe(true)
     expect(await getRes.text()).toBe(body)
   })

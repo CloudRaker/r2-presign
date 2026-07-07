@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-  entry: './src/r2-presign.ts',
+  entry: './src/index.ts',
   format: 'esm',
   dts: true,
   clean: true,

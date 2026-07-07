@@ -1,13 +1,15 @@
 {
   "name": "@cloudraker/r2-presign",
   "version": "1.1.0",
-  "description": "Presign S3-compatible PUT/GET URLs for Cloudflare R2 (SigV4, zero runtime deps).",
+  "description": "Presign S3-compatible URLs and mint scoped temporary credentials for Cloudflare R2 — SigV4, zero runtime deps.",
   "keywords": [
     "cloudflare",
+    "credentials",
     "presign",
     "r2",
     "s3",
-    "sigv4"
+    "sigv4",
+    "temporary-credentials"
   ],
   "homepage": "https://github.com/CloudRaker/r2-presign#readme",
   "bugs": {
@@ -24,12 +26,12 @@
   ],
   "type": "module",
   "sideEffects": false,
-  "main": "./dist/r2-presign.mjs",
-  "types": "./dist/r2-presign.d.mts",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/r2-presign.d.mts",
-      "import": "./dist/r2-presign.mjs"
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
     }
   },
   "publishConfig": {
@@ -42,6 +44,7 @@
     "test": "vitest --run --project node --project workers",
     "test:e2e": "vitest --run --project e2e",
     "test:all": "vitest --run",
+    "test:coverage": "vitest --run --coverage",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "format": "oxfmt --write .",

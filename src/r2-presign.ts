@@ -9,18 +9,8 @@
  * upload sends that exact Content-Type.
  */
 
-/**
- * Any field left unset falls back to an environment variable, matching
- * Cloudflare's R2 conventions (see the R2 FUSE-mount example):
- * `R2_ACCOUNT_ID`, `R2_BUCKET_NAME`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`.
- * In Workers these are populated into `process.env` by `nodejs_compat`.
- */
-export interface R2Credentials {
-  accountId?: string
-  bucket?: string
-  accessKeyId?: string
-  secretAccessKey?: string
-}
+import { hmacSha256, hashSha256 } from './crypto'
+import { type R2Credentials, resolveCredentials } from './credentials'
 
 export interface PresignR2GetOptions extends R2Credentials {
   key: string
@@ -34,50 +24,32 @@ export interface PresignR2PutOptions extends PresignR2GetOptions {
   contentType?: string
 }
 
-const encoder = new TextEncoder()
-
-// process.env is present in Node and in Workers via `nodejs_compat`
-function resolveCreds<T extends R2Credentials>(c: T): T & Required<R2Credentials> {
-  const env = process.env ?? {}
-  const accountId = c.accountId ?? env.R2_ACCOUNT_ID
-  const bucket = c.bucket ?? env.R2_BUCKET_NAME
-  const accessKeyId = c.accessKeyId ?? env.AWS_ACCESS_KEY_ID
-  const secretAccessKey = c.secretAccessKey ?? env.AWS_SECRET_ACCESS_KEY
-  if (!accountId || !bucket || !accessKeyId || !secretAccessKey) {
-    throw new Error(
-      'Missing R2 credentials: set accountId/bucket/accessKeyId/secretAccessKey in options, ' +
-        'or R2_ACCOUNT_ID/R2_BUCKET_NAME/AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY in the environment.',
-    )
-  }
-  return { ...c, accountId, bucket, accessKeyId, secretAccessKey }
-}
-
 interface DeprecatedWrappedUrl {
   url: string
 }
 
 /**
- * @deprecated use presign('PUT', args)
+ * @deprecated use presignR2('PUT', args)
  */
 export async function presignR2Put(args: PresignR2PutOptions): Promise<DeprecatedWrappedUrl> {
-  return { url: await presign('PUT', args) }
+  return { url: await presignR2('PUT', args) }
 }
 
 /**
- * @deprecated use presign('GET', args)
+ * @deprecated use presignR2('GET', args)
  */
 export async function presignR2Get(args: PresignR2GetOptions): Promise<DeprecatedWrappedUrl> {
-  return { url: await presign('GET', args) }
+  return { url: await presignR2('GET', args) }
 }
 
-export async function presign(method: 'GET', options: PresignR2GetOptions): Promise<string>
-export async function presign(method: 'PUT', options: PresignR2PutOptions): Promise<string>
-export async function presign(
+export async function presignR2(method: 'GET', options: PresignR2GetOptions): Promise<string>
+export async function presignR2(method: 'PUT', options: PresignR2PutOptions): Promise<string>
+export async function presignR2(
   method: 'GET' | 'PUT',
   options: PresignR2PutOptions,
 ): Promise<string> {
   const { accountId, accessKeyId, secretAccessKey, bucket, key, expiresInSeconds, contentType } =
-    resolveCreds(options)
+    resolveCredentials(options)
   const host = `${accountId}.r2.cloudflarestorage.com`
 
   // Signed headers, sorted by lowercase name per SigV4. `content-type` sorts
@@ -131,14 +103,14 @@ export async function presign(
     'AWS4-HMAC-SHA256',
     datetime,
     credentialScope,
-    new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(canonicalRequest))).toHex(),
+    await hashSha256(canonicalRequest),
   ].join('\n')
 
-  const kDate = await hmac(`AWS4${secretAccessKey}`, date)
-  const kRegion = await hmac(kDate, 'auto')
-  const kService = await hmac(kRegion, 's3')
-  const kSigning = await hmac(kService, 'aws4_request')
-  const signature = new Uint8Array(await hmac(kSigning, stringToSign)).toHex()
+  const kDate = await hmacSha256(`AWS4${secretAccessKey}`, date)
+  const kRegion = await hmacSha256(kDate, 'auto')
+  const kService = await hmacSha256(kRegion, 's3')
+  const kSigning = await hmacSha256(kService, 'aws4_request')
+  const signature = new Uint8Array(await hmacSha256(kSigning, stringToSign)).toHex()
 
   queryParams.set('X-Amz-Signature', signature)
   return url.toString()
@@ -147,15 +119,4 @@ export async function presign(
 // SigV4 requires RFC 3986 encoding: `! ' ( ) *` beyond what encodeURIComponent covers.
 function rfc3986(s: string): string {
   return s.replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
-}
-
-async function hmac(key: ArrayBuffer | string, data: string): Promise<ArrayBuffer> {
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    typeof key === 'string' ? encoder.encode(key) : key,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  )
-  return crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(data))
 }
