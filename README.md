@@ -23,7 +23,7 @@ const url = await presignR2('PUT', {
   accessKeyId: env.AWS_ACCESS_KEY_ID,
   secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
   key: 'clients/acme/report.pdf',
-  expiresInSeconds: 300,
+  ttlSeconds: 300, // optional, defaults to 3600
   // Optional: sign the content type so R2 rejects an upload that sends anything
   // else. Omit to let the client PUT any type.
   contentType: 'application/pdf',
@@ -32,19 +32,23 @@ const url = await presignR2('PUT', {
 await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/pdf' }, body: file })
 
 // Presigned GET — short-lived bearer URL for immediate preview/download.
-// Do not persist it.
-const downloadUrl = await presignR2('GET', {
-  accountId: env.R2_ACCOUNT_ID,
-  bucket: env.R2_BUCKET_NAME,
-  accessKeyId: env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
-  key: 'clients/acme/report.pdf',
-  expiresInSeconds: 300,
-})
+// Do not persist it. Any field left unset falls back to its env var, so with
+// R2_ACCOUNT_ID / R2_BUCKET_NAME / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY set,
+// only `key` is required.
+const downloadUrl = await presignR2('GET', { key: 'clients/acme/report.pdf', ttlSeconds: 300 })
 ```
 
 Credentials are R2 S3 API tokens (Account → R2 → Manage API tokens), not the
 Worker R2 binding.
+
+To presign with **temporary credentials**, pass the `sessionToken` (falls back to
+`AWS_SESSION_TOKEN`) alongside the derived key pair — it's signed into the URL as
+`X-Amz-Security-Token`:
+
+```ts
+const creds = await createR2TempCredentials({ scope: 'object-read-only', ttlSeconds: 3600 })
+const downloadUrl = await presignR2('GET', { ...creds, key: 'clients/acme/report.pdf' })
+```
 
 ### Temporary credentials
 
@@ -85,17 +89,19 @@ short and scope both actions and paths as narrowly as the client workflow allows
 
 ### Environment variables
 
-The library takes credentials as plain arguments — names are your choice. This
-package's own Worker config uses the S3-tool convention, declared as required
+Any argument left unset falls back to an environment variable (via `process.env`,
+populated by `nodejs_compat` in Workers). The required four are declared as
 secrets in `wrangler.jsonc` (`secrets.required`) so `wrangler types` generates
-their types:
+their types; `AWS_SESSION_TOKEN` is optional and only used for temporary
+credentials.
 
-| Variable                | Purpose                      |
-| ----------------------- | ---------------------------- |
-| `R2_ACCOUNT_ID`         | Cloudflare account ID        |
-| `R2_BUCKET_NAME`        | R2 bucket name               |
-| `AWS_ACCESS_KEY_ID`     | R2 S3 API token — access key |
-| `AWS_SECRET_ACCESS_KEY` | R2 S3 API token — secret key |
+| Variable                | Purpose                                | Required |
+| ----------------------- | -------------------------------------- | -------- |
+| `R2_ACCOUNT_ID`         | Cloudflare account ID                  | yes      |
+| `R2_BUCKET_NAME`        | R2 bucket name                         | yes      |
+| `AWS_ACCESS_KEY_ID`     | R2 S3 API token — access key           | yes      |
+| `AWS_SECRET_ACCESS_KEY` | R2 S3 API token — secret key           | yes      |
+| `AWS_SESSION_TOKEN`     | Session token for temporary creds      | no       |
 
 `R2_*` for R2-specific values, `AWS_*` for the S3 credential pair (reused as-is
 by the AWS SDK / `aws4fetch`). Set them in `.dev.vars` locally and via
