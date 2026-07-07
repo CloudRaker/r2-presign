@@ -95,13 +95,13 @@ secrets in `wrangler.jsonc` (`secrets.required`) so `wrangler types` generates
 their types; `AWS_SESSION_TOKEN` is optional and only used for temporary
 credentials.
 
-| Variable                | Purpose                                | Required |
-| ----------------------- | -------------------------------------- | -------- |
-| `R2_ACCOUNT_ID`         | Cloudflare account ID                  | yes      |
-| `R2_BUCKET_NAME`        | R2 bucket name                         | yes      |
-| `AWS_ACCESS_KEY_ID`     | R2 S3 API token — access key           | yes      |
-| `AWS_SECRET_ACCESS_KEY` | R2 S3 API token — secret key           | yes      |
-| `AWS_SESSION_TOKEN`     | Session token for temporary creds      | no       |
+| Variable                | Purpose                           | Required |
+| ----------------------- | --------------------------------- | -------- |
+| `R2_ACCOUNT_ID`         | Cloudflare account ID             | yes      |
+| `R2_BUCKET_NAME`        | R2 bucket name                    | yes      |
+| `AWS_ACCESS_KEY_ID`     | R2 S3 API token — access key      | yes      |
+| `AWS_SECRET_ACCESS_KEY` | R2 S3 API token — secret key      | yes      |
+| `AWS_SESSION_TOKEN`     | Session token for temporary creds | no       |
 
 `R2_*` for R2-specific values, `AWS_*` for the S3 credential pair (reused as-is
 by the AWS SDK / `aws4fetch`). Set them in `.dev.vars` locally and via
@@ -111,7 +111,7 @@ by the AWS SDK / `aws4fetch`). Set them in `.dev.vars` locally and via
 
 ```sh
 pnpm build          # tsdown → dist/ (ESM + .d.ts)
-pnpm typecheck      # tsc --noEmit (src + both test tsconfigs)
+pnpm typecheck      # tsc --noEmit (src + all tests)
 pnpm test           # unit test in node + workers pools (vs aws4fetch oracle)
 pnpm test:e2e       # round-trip against real R2 (needs .dev.vars secrets)
 pnpm lint           # oxlint

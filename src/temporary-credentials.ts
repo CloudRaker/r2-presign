@@ -27,7 +27,7 @@ export interface CreateR2TempCredentialsOptions extends R2Config {
 }
 
 export async function createR2TempCredentials(
-    options: CreateR2TempCredentialsOptions,
+  options: CreateR2TempCredentialsOptions,
 ): Promise<R2TempCredentials> {
   const {
     accountId,
@@ -43,20 +43,20 @@ export async function createR2TempCredentials(
   const now_s = Math.floor(Date.now() / 1000)
 
   const jwt = await signHs256Jwt(
-      <R2JwtPayload>{
-        bucket,
-        scope,
-        sub: accountId,
-        iss: accessKeyId,
-        aud: hostForAccount(accountId),
-        iat: now_s,
-        exp: now_s + ttlSeconds,
-        ...(actions?.length ? { actions } : {}),
-        ...(paths
-            ? { paths: { prefixPaths: paths.prefixPaths ?? [], objectPaths: paths.objectPaths ?? [] } }
-            : {}),
-      },
-      secretAccessKey,
+    <R2JwtPayload>{
+      bucket,
+      scope,
+      sub: accountId,
+      iss: accessKeyId,
+      aud: hostForAccount(accountId),
+      iat: now_s,
+      exp: now_s + ttlSeconds,
+      ...(actions?.length ? { actions } : {}),
+      ...(paths
+        ? { paths: { prefixPaths: paths.prefixPaths ?? [], objectPaths: paths.objectPaths ?? [] } }
+        : {}),
+    },
+    secretAccessKey,
   )
 
   return {

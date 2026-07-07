@@ -15,9 +15,9 @@ const requiredEnvFallback = {
   secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
 }
 
-const requiredPropNames = Object.keys(
-  requiredEnvFallback,
-) as ReadonlyArray<keyof typeof requiredEnvFallback>
+const requiredPropNames = Object.keys(requiredEnvFallback) as ReadonlyArray<
+  keyof typeof requiredEnvFallback
+>
 
 export interface R2Config {
   /** Cloudflare account ID; falls back to `R2_ACCOUNT_ID`. */
@@ -35,7 +35,9 @@ export interface R2Config {
   sessionToken?: string
 }
 
-type ResolvedR2Config<T> = T & Required<Omit<R2Config, 'sessionToken'>> & Pick<R2Config, 'sessionToken'>
+type ResolvedR2Config<T> = T &
+  Required<Omit<R2Config, 'sessionToken'>> &
+  Pick<R2Config, 'sessionToken'>
 
 export function resolveR2Config<T extends R2Config>(c: T): ResolvedR2Config<T> {
   const resolved = {
