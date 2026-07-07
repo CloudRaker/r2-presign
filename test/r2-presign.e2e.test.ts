@@ -20,16 +20,12 @@ describe('e2e: presign round-trip', () => {
 
   // No creds passed — exercises the env fallback (process.env via nodejs_compat).
   it('PUT then GET returns same content', async () => {
-    const put = await presignR2Put({
-      key,
-      contentLength: new TextEncoder().encode(body).byteLength,
-      contentType: 'text/plain',
-      expiresInSeconds: 300,
-    })
+    // Enforce the type: the upload must send this exact Content-Type or R2 403s.
+    const put = await presignR2Put({ key, contentType: 'text/plain', expiresInSeconds: 300 })
 
     const putRes = await fetch(put.url, {
       method: 'PUT',
-      headers: put.headers,
+      headers: { 'Content-Type': 'text/plain' },
       body,
     })
     expect(putRes.ok).toBe(true)

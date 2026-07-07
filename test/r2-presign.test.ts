@@ -16,7 +16,11 @@ const creds = {
  * Reference URL from aws4fetch (the trusted SigV4 implementation), pinned to the
  * same datetime our signer used so the comparison is deterministic — no clock mocking.
  */
-async function oracle(method: 'GET' | 'PUT', datetime: string): Promise<URL> {
+async function oracle(
+  method: 'GET' | 'PUT',
+  datetime: string,
+  headers?: Record<string, string>,
+): Promise<URL> {
   const client = new AwsClient({
     accessKeyId: creds.accessKeyId,
     secretAccessKey: creds.secretAccessKey,
@@ -28,8 +32,10 @@ async function oracle(method: 'GET' | 'PUT', datetime: string): Promise<URL> {
     `https://${creds.accountId}.r2.cloudflarestorage.com/${creds.bucket}/${encKey}`,
   )
   url.searchParams.set('X-Amz-Expires', '300')
-  const signed = await client.sign(new Request(url.toString(), { method }), {
-    aws: { signQuery: true, datetime },
+  // aws4fetch treats content-type as unsignable by default; allHeaders forces it
+  // into SignedHeaders so the oracle matches an enforced content-type.
+  const signed = await client.sign(new Request(url.toString(), { method, headers }), {
+    aws: { signQuery: true, datetime, allHeaders: headers !== undefined },
   })
   return new URL(signed.url)
 }
@@ -41,28 +47,23 @@ function params(url: string | URL): Record<string, string> {
 
 describe('presignR2Put', () => {
   it('produces the same signature + params as aws4fetch', async () => {
-    const { url } = await presignR2Put({
-      ...creds,
-      contentLength: 123,
-      contentType: 'application/pdf',
-      expiresInSeconds: 300,
-    })
+    const { url } = await presignR2Put({ ...creds, expiresInSeconds: 300 })
     const ref = await oracle('PUT', params(url)['X-Amz-Date'])
     expect(new URL(url).pathname).toBe(ref.pathname)
     expect(params(url)).toEqual(params(ref))
   })
 
-  it('echoes the content headers the client must send', async () => {
-    const { headers } = await presignR2Put({
+  it('signs content-type when set, matching aws4fetch', async () => {
+    const { url } = await presignR2Put({
       ...creds,
-      contentLength: 123,
       contentType: 'application/pdf',
       expiresInSeconds: 300,
     })
-    expect(headers).toEqual({
-      'Content-Length': '123',
-      'Content-Type': 'application/pdf',
+    expect(params(url)['X-Amz-SignedHeaders']).toBe('content-type;host')
+    const ref = await oracle('PUT', params(url)['X-Amz-Date'], {
+      'content-type': 'application/pdf',
     })
+    expect(params(url)).toEqual(params(ref))
   })
 })
 

@@ -1,6 +1,6 @@
 {
   "name": "@cloudraker/r2-presign",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Presign S3-compatible PUT/GET URLs for Cloudflare R2 (SigV4, zero runtime deps).",
   "keywords": [
     "cloudflare",

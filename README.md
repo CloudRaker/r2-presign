@@ -15,18 +15,20 @@ pnpm add @cloudraker/r2-presign
 ```ts
 import { presignR2Put, presignR2Get } from '@cloudraker/r2-presign'
 
-// Presigned PUT — client uploads directly to R2 and must echo the headers.
-const { url, headers } = await presignR2Put({
+// Presigned PUT — client uploads directly to R2.
+const { url } = await presignR2Put({
   accountId: env.R2_ACCOUNT_ID,
   bucket: env.R2_BUCKET_NAME,
   accessKeyId: env.AWS_ACCESS_KEY_ID,
   secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
   key: 'clients/acme/report.pdf',
-  contentLength: file.size,
-  contentType: file.type,
   expiresInSeconds: 300,
+  // Optional: sign the content type so R2 rejects an upload that sends anything
+  // else. Omit to let the client PUT any type.
+  contentType: 'application/pdf',
 })
-await fetch(url, { method: 'PUT', headers, body: file })
+// The upload must send the signed Content-Type exactly, or R2 returns 403.
+await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/pdf' }, body: file })
 
 // Presigned GET — short-lived bearer URL for immediate preview/download.
 // Do not persist it.

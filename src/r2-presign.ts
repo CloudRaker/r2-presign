@@ -3,10 +3,10 @@
  * implemented with the Web Crypto API — no runtime dependencies.
  *
  * R2 accepts AWS Signature Version 4 against `<account>.r2.cloudflarestorage.com`
- * with region `auto` / service `s3`. For presigned (query-signed) URLs the only
- * signed header is `host`; the payload is signed as `UNSIGNED-PAYLOAD`. Any
- * Content-Type / Content-Length the caller wants enforced on a PUT is returned
- * as headers to echo, matching S3's unsignable-header behavior.
+ * with region `auto` / service `s3`. For presigned (query-signed) URLs the
+ * payload is signed as `UNSIGNED-PAYLOAD` and only `host` is signed by default.
+ * A PUT may optionally sign `content-type` too, which makes R2 enforce that the
+ * upload sends that exact Content-Type.
  */
 
 /**
@@ -22,33 +22,23 @@ export interface R2Credentials {
   secretAccessKey?: string
 }
 
-export interface PresignR2PutOptions extends R2Credentials {
-  key: string
-  contentLength: number
-  contentType: string
-  expiresInSeconds: number
-}
-
 export interface PresignR2GetOptions extends R2Credentials {
   key: string
   expiresInSeconds: number
 }
 
-export interface PresignR2PutResult {
-  url: string
-  headers: Record<string, string>
-}
-
-export interface PresignR2GetResult {
-  url: string
+export interface PresignR2PutOptions extends PresignR2GetOptions {
+  // When set, `content-type` is added to the signed headers, so R2 rejects any
+  // upload whose `Content-Type` header doesn't match exactly. Omit to leave the
+  // uploader free to send any type.
+  contentType?: string
 }
 
 const encoder = new TextEncoder()
 
-// process.env is present in Node and in Workers via `nodejs_compat` — one path, no split.
-function resolveCreds(c: R2Credentials): Required<R2Credentials> {
-  const env =
-    (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
+// process.env is present in Node and in Workers via `nodejs_compat`
+function resolveCreds<T extends R2Credentials>(c: T): T & Required<R2Credentials> {
+  const env = process.env ?? {}
   const accountId = c.accountId ?? env.R2_ACCOUNT_ID
   const bucket = c.bucket ?? env.R2_BUCKET_NAME
   const accessKeyId = c.accessKeyId ?? env.AWS_ACCESS_KEY_ID
@@ -59,28 +49,45 @@ function resolveCreds(c: R2Credentials): Required<R2Credentials> {
         'or R2_ACCOUNT_ID/R2_BUCKET_NAME/AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY in the environment.',
     )
   }
-  return { accountId, bucket, accessKeyId, secretAccessKey }
+  return { ...c, accountId, bucket, accessKeyId, secretAccessKey }
 }
 
-export async function presignR2Put(args: PresignR2PutOptions): Promise<PresignR2PutResult> {
-  const url = await presign('PUT', args)
-  return {
-    url,
-    headers: {
-      'Content-Length': String(args.contentLength),
-      'Content-Type': args.contentType,
-    },
-  }
+interface DeprecatedWrappedUrl {
+  url: string
 }
 
-export async function presignR2Get(args: PresignR2GetOptions): Promise<PresignR2GetResult> {
+/**
+ * @deprecated use presign('PUT', args)
+ */
+export async function presignR2Put(args: PresignR2PutOptions): Promise<DeprecatedWrappedUrl> {
+  return { url: await presign('PUT', args) }
+}
+
+/**
+ * @deprecated use presign('GET', args)
+ */
+export async function presignR2Get(args: PresignR2GetOptions): Promise<DeprecatedWrappedUrl> {
   return { url: await presign('GET', args) }
 }
 
-async function presign(method: 'GET' | 'PUT', options: PresignR2GetOptions): Promise<string> {
-  const { key, expiresInSeconds } = options
-  const { accountId, accessKeyId, secretAccessKey, bucket } = resolveCreds(options)
+export async function presign(method: 'GET', options: PresignR2GetOptions): Promise<string>
+export async function presign(method: 'PUT', options: PresignR2PutOptions): Promise<string>
+export async function presign(
+  method: 'GET' | 'PUT',
+  options: PresignR2PutOptions,
+): Promise<string> {
+  const { accountId, accessKeyId, secretAccessKey, bucket, key, expiresInSeconds, contentType } =
+    resolveCreds(options)
   const host = `${accountId}.r2.cloudflarestorage.com`
+
+  // Signed headers, sorted by lowercase name per SigV4. `content-type` sorts
+  // before `host`, so enforcing it just prepends an entry.
+  const signedHeaders: [string, string][] = [['host', host]]
+  if (contentType != null) {
+    signedHeaders.unshift(['content-type', contentType.trim().replace(/\s+/g, ' ')])
+  }
+  const signedHeaderNames = signedHeaders.map(([name]) => name).join(';')
+  const canonicalHeaders = signedHeaders.map(([name, value]) => `${name}:${value}\n`).join('')
 
   const url = new URL(
     `https://${host}/${bucket}/${key
@@ -98,7 +105,7 @@ async function presign(method: 'GET' | 'PUT', options: PresignR2GetOptions): Pro
   queryParams.set('X-Amz-Credential', `${accessKeyId}/${credentialScope}`)
   queryParams.set('X-Amz-Date', datetime)
   queryParams.set('X-Amz-Expires', String(expiresInSeconds))
-  queryParams.set('X-Amz-SignedHeaders', 'host')
+  queryParams.set('X-Amz-SignedHeaders', signedHeaderNames)
 
   const decoded = decodeURIComponent(url.pathname.replace(/\+/g, ' '))
   const canonicalPath = rfc3986(encodeURIComponent(decoded).replace(/%2F/g, '/'))
@@ -115,8 +122,8 @@ async function presign(method: 'GET' | 'PUT', options: PresignR2GetOptions): Pro
     method,
     canonicalPath,
     canonicalQuery,
-    `host:${host}\n`,
-    'host',
+    canonicalHeaders,
+    signedHeaderNames,
     'UNSIGNED-PAYLOAD',
   ].join('\n')
 
@@ -124,24 +131,17 @@ async function presign(method: 'GET' | 'PUT', options: PresignR2GetOptions): Pro
     'AWS4-HMAC-SHA256',
     datetime,
     credentialScope,
-    toHex(await crypto.subtle.digest('SHA-256', encoder.encode(canonicalRequest))),
+    new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(canonicalRequest))).toHex(),
   ].join('\n')
 
   const kDate = await hmac(`AWS4${secretAccessKey}`, date)
   const kRegion = await hmac(kDate, 'auto')
   const kService = await hmac(kRegion, 's3')
   const kSigning = await hmac(kService, 'aws4_request')
-  const signature = toHex(await hmac(kSigning, stringToSign))
+  const signature = new Uint8Array(await hmac(kSigning, stringToSign)).toHex()
 
   queryParams.set('X-Amz-Signature', signature)
   return url.toString()
-}
-
-// Uint8Array.prototype.toHex ships in workerd but not yet in Node — do it portably.
-function toHex(buf: ArrayBuffer): string {
-  let hex = ''
-  for (const b of new Uint8Array(buf)) hex += b.toString(16).padStart(2, '0')
-  return hex
 }
 
 // SigV4 requires RFC 3986 encoding: `! ' ( ) *` beyond what encodeURIComponent covers.
