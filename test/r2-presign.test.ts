@@ -1,7 +1,7 @@
 import { AwsClient } from 'aws4fetch'
 import { describe, expect, it } from 'vitest'
 
-import { presignR2Get, presignR2Put } from './index'
+import { presignR2Get, presignR2Put } from '../src/r2-presign'
 
 const creds = {
   accountId: 'abc123def456',
@@ -29,7 +29,7 @@ async function oracle(method: 'GET' | 'PUT', datetime: string): Promise<URL> {
   )
   url.searchParams.set('X-Amz-Expires', '300')
   const signed = await client.sign(new Request(url.toString(), { method }), {
-    aws: { signQuery: true, datetime } as any,
+    aws: { signQuery: true, datetime },
   })
   return new URL(signed.url)
 }

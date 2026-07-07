@@ -18,9 +18,9 @@ import { presignR2Put, presignR2Get } from '@cloudraker/r2-presign'
 // Presigned PUT — client uploads directly to R2 and must echo the headers.
 const { url, headers } = await presignR2Put({
   accountId: env.R2_ACCOUNT_ID,
-  bucket: 'uploads',
-  accessKeyId: env.R2_ACCESS_KEY_ID,
-  secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+  bucket: env.R2_BUCKET_NAME,
+  accessKeyId: env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
   key: 'clients/acme/report.pdf',
   contentLength: file.size,
   contentType: file.type,
@@ -32,9 +32,9 @@ await fetch(url, { method: 'PUT', headers, body: file })
 // Do not persist it.
 const { url: downloadUrl } = await presignR2Get({
   accountId: env.R2_ACCOUNT_ID,
-  bucket: 'uploads',
-  accessKeyId: env.R2_ACCESS_KEY_ID,
-  secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+  bucket: env.R2_BUCKET_NAME,
+  accessKeyId: env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
   key: 'clients/acme/report.pdf',
   expiresInSeconds: 300,
 })
@@ -43,12 +43,32 @@ const { url: downloadUrl } = await presignR2Get({
 Credentials are R2 S3 API tokens (Account → R2 → Manage API tokens), not the
 Worker R2 binding.
 
+### Environment variables
+
+The library takes credentials as plain arguments — names are your choice. This
+package's own Worker config uses the S3-tool convention, declared as required
+secrets in `wrangler.jsonc` (`secrets.required`) so `wrangler types` generates
+their types:
+
+| Variable                | Purpose                      |
+| ----------------------- | ---------------------------- |
+| `R2_ACCOUNT_ID`         | Cloudflare account ID        |
+| `R2_BUCKET_NAME`        | R2 bucket name               |
+| `AWS_ACCESS_KEY_ID`     | R2 S3 API token — access key |
+| `AWS_SECRET_ACCESS_KEY` | R2 S3 API token — secret key |
+
+`R2_*` for R2-specific values, `AWS_*` for the S3 credential pair (reused as-is
+by the AWS SDK / `aws4fetch`). Set them in `.dev.vars` locally and via
+`wrangler secret put` in production.
+
 ## Build
 
 ```sh
 pnpm build          # tsdown → dist/ (ESM + .d.ts)
-pnpm typecheck      # tsc --noEmit
-pnpm test           # vitest (workerd pool, verifies against aws4fetch oracle)
+pnpm typecheck      # tsc --noEmit (src + both test tsconfigs)
+pnpm test           # unit test in node + workers pools (vs aws4fetch oracle)
+pnpm test:e2e       # round-trip against real R2 (needs .dev.vars secrets)
 pnpm lint           # oxlint
 pnpm format:check   # oxfmt
+pnpm cf-typegen     # regenerate worker-configuration.d.ts from wrangler.jsonc
 ```

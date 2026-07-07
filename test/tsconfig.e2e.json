@@ -1,0 +1,10 @@
+{
+  // e2e runs in the Workers pool and imports `cloudflare:test` — needs the
+  // pool + Workers ambient types on top of the unit base.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "../worker-configuration.d.ts", "@cloudflare/vitest-pool-workers"]
+  },
+  "include": ["r2-presign.e2e.test.ts", "../src/**/*"],
+  "exclude": []
+}

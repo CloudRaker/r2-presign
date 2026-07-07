@@ -5,11 +5,7 @@
   "categories": {
     "correctness": "error",
     "suspicious": "warn",
-    "perf": "warn",
-    "pedantic": "off",
-    "style": "off",
-    "restriction": "off",
-    "nursery": "off"
+    "perf": "warn"
   },
   "rules": {
     "no-unused-vars": ["warn", { "ignoreRestSiblings": true }],

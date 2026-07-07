@@ -9,39 +9,37 @@
     "s3",
     "sigv4"
   ],
+  "homepage": "https://github.com/CloudRaker/r2-presign#readme",
+  "bugs": {
+    "url": "https://github.com/CloudRaker/r2-presign/issues"
+  },
   "license": "ISC",
   "author": "CloudRaker",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/CloudRaker/r2-presign.git"
   },
-  "bugs": {
-    "url": "https://github.com/CloudRaker/r2-presign/issues"
-  },
-  "homepage": "https://github.com/CloudRaker/r2-presign#readme",
-  "engines": {
-    "node": ">=18"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
   "files": [
     "dist"
   ],
   "type": "module",
   "sideEffects": false,
-  "main": "./dist/index.mjs",
-  "types": "./dist/index.d.mts",
+  "main": "./dist/r2-presign.mjs",
+  "types": "./dist/r2-presign.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs"
+      "types": "./dist/r2-presign.d.mts",
+      "import": "./dist/r2-presign.mjs"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsdown",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest --run --project unit",
+    "cf-typegen": "wrangler types",
+    "typecheck": "tsc --noEmit && tsc -p test/tsconfig.json && tsc -p test/tsconfig.e2e.json",
+    "test": "vitest --run --project node --project workers",
     "test:e2e": "vitest --run --project e2e",
     "test:all": "vitest --run",
     "lint": "oxlint",
@@ -52,6 +50,8 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.18.0",
+    "@types/node": "^26.1.0",
+    "@vitest/coverage-v8": "^4.1.10",
     "aws4fetch": "^1.0.20",
     "oxfmt": "^0.57.0",
     "oxlint": "^1.72.0",
@@ -59,6 +59,9 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.10",
     "wrangler": "^4.107.0"
+  },
+  "engines": {
+    "node": ">=25"
   },
   "packageManager": "pnpm@11.9.0"
 }

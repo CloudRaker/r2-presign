@@ -6,19 +6,7 @@
   "singleQuote": true,
   "trailingComma": "all",
   "semi": false,
-  "sortImports": {
-    "newlinesBetween": true,
-    "groups": [
-      ["value-builtin", "value-external"],
-      "value-internal",
-      ["value-parent", "value-sibling", "value-index"],
-      ["type-builtin", "type-external"],
-      "type-internal",
-      ["type-parent", "type-sibling", "type-index"],
-      "unknown"
-    ]
-  },
-  "ignorePatterns": ["dist", "node_modules", ".wrangler"],
+  "ignorePatterns": ["dist", "node_modules", ".wrangler", "worker-configuration.d.ts"],
   "overrides": [
     {
       "files": ["*.jsonc"],
