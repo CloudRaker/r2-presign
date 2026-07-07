@@ -20,10 +20,12 @@ async function oracle(
   method: 'GET' | 'PUT',
   datetime: string,
   headers?: Record<string, string>,
+  sessionToken?: string,
 ): Promise<URL> {
   const client = new AwsClient({
     accessKeyId: creds.accessKeyId,
     secretAccessKey: creds.secretAccessKey,
+    ...(sessionToken ? { sessionToken } : {}),
     service: 's3',
     region: 'auto',
   })
@@ -75,6 +77,14 @@ describe('presignR2 GET', () => {
     const url = await presignR2('GET', { ...creds, ttlSeconds: 300 })
     const ref = await oracle('GET', params(url)['X-Amz-Date']!)
     expect(new URL(url).pathname).toBe(ref.pathname)
+    expect(params(url)).toEqual(params(ref))
+  })
+
+  it('signs X-Amz-Security-Token for temp credentials, matching aws4fetch', async () => {
+    const sessionToken = 'FQoGZXIvYXdzEExampleSessionToken=='
+    const url = await presignR2('GET', { ...creds, ttlSeconds: 300, sessionToken })
+    expect(params(url)['X-Amz-Security-Token']).toBe(sessionToken)
+    const ref = await oracle('GET', params(url)['X-Amz-Date']!, undefined, sessionToken)
     expect(params(url)).toEqual(params(ref))
   })
 

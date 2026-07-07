@@ -59,6 +59,7 @@ export async function presignR2(
     key,
     ttlSeconds = 3600,
     contentType,
+    sessionToken,
   } = resolveR2Config(options)
   const host = hostForAccount(accountId)
 
@@ -90,6 +91,10 @@ export async function presignR2(
   queryParams.set('X-Amz-Date', datetime)
   queryParams.set('X-Amz-Expires', String(ttlSeconds))
   queryParams.set('X-Amz-SignedHeaders', signedHeaderNames)
+  // Temp-credential token is a signed query param, so it's part of the canonical query.
+  if (sessionToken != null) {
+    queryParams.set('X-Amz-Security-Token', sessionToken)
+  }
 
   const canonicalQuery = [...queryParams]
     .map(([k, v]): [string, string] => [
