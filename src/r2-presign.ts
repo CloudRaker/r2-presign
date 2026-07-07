@@ -9,18 +9,21 @@
  * upload sends that exact Content-Type.
  */
 
-import { hmacSha256, hashSha256 } from './crypto'
-import { type R2Credentials, resolveCredentials } from './credentials'
+import { hmacSha256, hashSha256, toHex } from './crypto'
+import { hostForAccount, type R2Config, resolveR2Config } from './config'
 
-export interface PresignR2GetOptions extends R2Credentials {
+export interface PresignR2GetOptions extends R2Config {
   key: string
-  expiresInSeconds: number
+  /** Credential lifetime; defaults to 3600s. */
+  ttlSeconds?: number
 }
 
 export interface PresignR2PutOptions extends PresignR2GetOptions {
-  // When set, `content-type` is added to the signed headers, so R2 rejects any
-  // upload whose `Content-Type` header doesn't match exactly. Omit to leave the
-  // uploader free to send any type.
+  /**
+   * When set, `content-type` is added to the signed headers, so R2 rejects
+   * uploads whose `Content-Type` header doesn't match exactly.
+   * Omit to leave the uploader free to send any type.
+   */
   contentType?: string
 }
 
@@ -48,9 +51,16 @@ export async function presignR2(
   method: 'GET' | 'PUT',
   options: PresignR2PutOptions,
 ): Promise<string> {
-  const { accountId, accessKeyId, secretAccessKey, bucket, key, expiresInSeconds, contentType } =
-    resolveCredentials(options)
-  const host = `${accountId}.r2.cloudflarestorage.com`
+  const {
+    accountId,
+    accessKeyId,
+    secretAccessKey,
+    bucket,
+    key,
+    ttlSeconds = 3600,
+    contentType,
+  } = resolveR2Config(options)
+  const host = hostForAccount(accountId)
 
   // Signed headers, sorted by lowercase name per SigV4. `content-type` sorts
   // before `host`, so enforcing it just prepends an entry.
@@ -61,12 +71,14 @@ export async function presignR2(
   const signedHeaderNames = signedHeaders.map(([name]) => name).join(';')
   const canonicalHeaders = signedHeaders.map(([name, value]) => `${name}:${value}\n`).join('')
 
-  const url = new URL(
-    `https://${host}/${bucket}/${key
-      .split('/')
-      .map((seg) => encodeURIComponent(seg))
-      .join('/')}`,
-  )
+  // Encode the object path once from the raw key (per segment, `/` kept literal).
+  // The URL uses it as-is; the SigV4 canonical path also RFC3986-encodes `!'()*`.
+  const path = `/${bucket}/${key
+    .split('/')
+    .map((seg) => encodeURIComponent(seg))
+    .join('/')}`
+  const canonicalPath = rfc3986(path)
+  const url = new URL(`https://${host}${path}`)
 
   const datetime = new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
   const date = datetime.slice(0, 8)
@@ -76,14 +88,14 @@ export async function presignR2(
   queryParams.set('X-Amz-Algorithm', 'AWS4-HMAC-SHA256')
   queryParams.set('X-Amz-Credential', `${accessKeyId}/${credentialScope}`)
   queryParams.set('X-Amz-Date', datetime)
-  queryParams.set('X-Amz-Expires', String(expiresInSeconds))
+  queryParams.set('X-Amz-Expires', String(ttlSeconds))
   queryParams.set('X-Amz-SignedHeaders', signedHeaderNames)
 
-  const decoded = decodeURIComponent(url.pathname.replace(/\+/g, ' '))
-  const canonicalPath = rfc3986(encodeURIComponent(decoded).replace(/%2F/g, '/'))
-
   const canonicalQuery = [...queryParams]
-    .map(([k, v]) => [rfc3986(encodeURIComponent(k)), rfc3986(encodeURIComponent(v))])
+    .map(([k, v]): [string, string] => [
+      rfc3986(encodeURIComponent(k)),
+      rfc3986(encodeURIComponent(v)),
+    ])
     .toSorted((a, b) =>
       a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0,
     )
@@ -110,7 +122,7 @@ export async function presignR2(
   const kRegion = await hmacSha256(kDate, 'auto')
   const kService = await hmacSha256(kRegion, 's3')
   const kSigning = await hmacSha256(kService, 'aws4_request')
-  const signature = new Uint8Array(await hmacSha256(kSigning, stringToSign)).toHex()
+  const signature = toHex(await hmacSha256(kSigning, stringToSign))
 
   queryParams.set('X-Amz-Signature', signature)
   return url.toString()

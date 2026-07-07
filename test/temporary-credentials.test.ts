@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createR2TempCredentials } from '../src/temporary-credentials'
+import { createR2TempCredentials, type R2JwtPayload } from '../src/temporary-credentials'
 
 const parent = {
   accountId: 'acct123',
@@ -18,7 +18,7 @@ function jwtFromSessionToken(sessionToken: string): string {
   return decoded.slice(4)
 }
 
-function decodeSegment(seg: string): Record<string, unknown> {
+function decodeSegment(seg: string): R2JwtPayload {
   const b64 = seg.replace(/-/g, '+').replace(/_/g, '/')
   return JSON.parse(atob(b64))
 }
@@ -33,7 +33,7 @@ async function signatureValid(jwt: string, secret: string): Promise<boolean> {
     false,
     ['verify'],
   )
-  const sigBytes = Uint8Array.from(atob(signature.replace(/-/g, '+').replace(/_/g, '/')), (c) =>
+  const sigBytes = Uint8Array.from(atob(signature!.replace(/-/g, '+').replace(/_/g, '/')), (c) =>
     c.charCodeAt(0),
   )
   return crypto.subtle.verify('HMAC', key, sigBytes, enc.encode(`${header}.${payload}`))
@@ -67,11 +67,11 @@ describe('createR2TempCredentials', () => {
     })
     const jwt = jwtFromSessionToken(creds.sessionToken)
 
-    expect(decodeSegment(jwt.split('.')[0])).toEqual({ alg: 'HS256', typ: 'JWT' })
+    expect(decodeSegment(jwt.split('.')[0]!)).toEqual({ alg: 'HS256', typ: 'JWT' })
     expect(await signatureValid(jwt, parent.secretAccessKey)).toBe(true)
     expect(await signatureValid(jwt, 'wrong-secret')).toBe(false)
 
-    const payload = decodeSegment(jwt.split('.')[1])
+    const payload = decodeSegment(jwt.split('.')[1]!)
     expect(payload.bucket).toBe('uploads')
     expect(payload.scope).toBe('object-read-write')
     expect(payload.actions).toEqual(['GetObject', 'PutObject'])
@@ -84,7 +84,7 @@ describe('createR2TempCredentials', () => {
 
   it('omits actions/paths when not scoped, defaults ttl to 3600s', async () => {
     const creds = await createR2TempCredentials({ ...parent, scope: 'admin-read-write' })
-    const payload = decodeSegment(jwtFromSessionToken(creds.sessionToken).split('.')[1])
+    const payload = decodeSegment(jwtFromSessionToken(creds.sessionToken).split('.')[1]!)
     expect(payload).not.toHaveProperty('actions')
     expect(payload).not.toHaveProperty('paths')
     expect((payload.exp as number) - (payload.iat as number)).toBe(3600)
@@ -100,6 +100,6 @@ describe('createR2TempCredentials', () => {
         bucket: 'b',
         scope: 'object-read-only',
       }),
-    ).rejects.toThrow(/Missing R2 credential/)
+    ).rejects.toThrow(/Missing R2 config/)
   })
 })

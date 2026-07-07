@@ -1,12 +1,10 @@
 {
-  // Unit test: pure web-standard APIs (fetch/URL/crypto). No Workers-specific types.
   "extends": "../tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
     "rootDir": "..",
-    "types": ["node"],
-    "lib": ["ESNext", "DOM"]
+    "types": ["node", "../worker-configuration.d.ts"],
+    "lib": ["ESNext"]
   },
-  "include": ["*.test.ts", "../src/**/*"],
-  "exclude": ["*.e2e.test.ts"]
+  "include": ["*.test.ts", "../src/**/*"]
 }

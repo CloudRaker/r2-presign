@@ -34,9 +34,12 @@ async function oracle(
   url.searchParams.set('X-Amz-Expires', '300')
   // aws4fetch treats content-type as unsignable by default; allHeaders forces it
   // into SignedHeaders so the oracle matches an enforced content-type.
-  const signed = await client.sign(new Request(url.toString(), { method, headers }), {
-    aws: { signQuery: true, datetime, allHeaders: headers !== undefined },
-  })
+  const signed = await client.sign(
+    new Request(url.toString(), headers ? { method, headers } : { method }),
+    {
+      aws: { signQuery: true, datetime, allHeaders: headers !== undefined },
+    },
+  )
   return new URL(signed.url)
 }
 
@@ -47,8 +50,8 @@ function params(url: string | URL): Record<string, string> {
 
 describe('presignR2 PUT', () => {
   it('produces the same signature + params as aws4fetch', async () => {
-    const url = await presignR2('PUT', { ...creds, expiresInSeconds: 300 })
-    const ref = await oracle('PUT', params(url)['X-Amz-Date'])
+    const url = await presignR2('PUT', { ...creds, ttlSeconds: 300 })
+    const ref = await oracle('PUT', params(url)['X-Amz-Date']!)
     expect(new URL(url).pathname).toBe(ref.pathname)
     expect(params(url)).toEqual(params(ref))
   })
@@ -57,10 +60,10 @@ describe('presignR2 PUT', () => {
     const url = await presignR2('PUT', {
       ...creds,
       contentType: 'application/pdf',
-      expiresInSeconds: 300,
+      ttlSeconds: 300,
     })
     expect(params(url)['X-Amz-SignedHeaders']).toBe('content-type;host')
-    const ref = await oracle('PUT', params(url)['X-Amz-Date'], {
+    const ref = await oracle('PUT', params(url)['X-Amz-Date']!, {
       'content-type': 'application/pdf',
     })
     expect(params(url)).toEqual(params(ref))
@@ -69,15 +72,15 @@ describe('presignR2 PUT', () => {
 
 describe('presignR2 GET', () => {
   it('produces the same signature + params as aws4fetch', async () => {
-    const url = await presignR2('GET', { ...creds, expiresInSeconds: 300 })
-    const ref = await oracle('GET', params(url)['X-Amz-Date'])
+    const url = await presignR2('GET', { ...creds, ttlSeconds: 300 })
+    const ref = await oracle('GET', params(url)['X-Amz-Date']!)
     expect(new URL(url).pathname).toBe(ref.pathname)
     expect(params(url)).toEqual(params(ref))
   })
 
   // Guards the crypto independently of aws4fetch, in case the dev oracle is dropped.
   it('emits a well-formed SigV4 query', async () => {
-    const url = await presignR2('GET', { ...creds, expiresInSeconds: 300 })
+    const url = await presignR2('GET', { ...creds, ttlSeconds: 300 })
     const p = params(url)
     expect(p['X-Amz-Algorithm']).toBe('AWS4-HMAC-SHA256')
     expect(p['X-Amz-SignedHeaders']).toBe('host')

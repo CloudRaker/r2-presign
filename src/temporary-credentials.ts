@@ -10,7 +10,7 @@
  */
 
 import { hashSha256, signHs256Jwt } from './crypto'
-import { type R2Credentials, resolveCredentials } from './credentials'
+import { hostForAccount, type R2Config, resolveR2Config } from './config'
 
 export type R2Scope =
   | 'admin-read-write'
@@ -22,7 +22,7 @@ export type R2Scope =
  * The `accessKeyId` / `secretAccessKey` here are the *parent* R2 S3 credentials
  * the grant derives from — same fields (and env fallbacks) as the presigners.
  */
-export interface CreateR2TempCredentialsOptions extends R2Credentials {
+export interface CreateR2TempCredentialsOptions extends R2Config {
   scope: R2Scope
   /** Credential lifetime; defaults to 3600s. */
   ttlSeconds?: number
@@ -35,8 +35,26 @@ export interface CreateR2TempCredentialsOptions extends R2Credentials {
 export interface R2TempCredentials {
   accessKeyId: string
   secretAccessKey: string
-  // Sent as `X-Amz-Security-Token` header
+  /**
+   * Consumers: Set as env var AWS_SESSION_TOKEN
+   * Sent as `X-Amz-Security-Token` header
+   */
   sessionToken: string
+}
+
+export interface R2JwtPayload {
+  alg?: string
+  typ?: string
+  iss?: string
+  sub?: string
+  aud?: string
+  exp?: number
+  iat?: number
+  bucket: CreateR2TempCredentialsOptions['bucket']
+  scope: CreateR2TempCredentialsOptions['scope']
+  actions?: CreateR2TempCredentialsOptions['actions']
+  paths?: CreateR2TempCredentialsOptions['paths']
+  [k: string]: unknown
 }
 
 export async function createR2TempCredentials(
@@ -51,30 +69,27 @@ export async function createR2TempCredentials(
     scope,
     paths,
     ttlSeconds = 3600,
-  } = resolveCredentials(options)
+  } = resolveR2Config(options)
 
   const now_s = Math.floor(Date.now() / 1000)
 
-  const claims: Record<string, unknown> = {
-    bucket,
-    scope,
-    sub: accountId,
-    iss: accessKeyId,
-    aud: `${accountId}.r2.cloudflarestorage.com`,
-    iat: now_s,
-    exp: now_s + ttlSeconds,
-  }
-  if (actions?.length) {
-    claims.actions = actions
-  }
-  if (paths) {
-    claims.paths = {
-      prefixPaths: paths.prefixPaths ?? [],
-      objectPaths: paths.objectPaths ?? [],
-    }
-  }
+  const jwt = await signHs256Jwt(
+    <R2JwtPayload>{
+      bucket,
+      scope,
+      sub: accountId,
+      iss: accessKeyId,
+      aud: hostForAccount(accountId),
+      iat: now_s,
+      exp: now_s + ttlSeconds,
+      ...(actions?.length ? { actions } : {}),
+      ...(paths
+        ? { paths: { prefixPaths: paths.prefixPaths ?? [], objectPaths: paths.objectPaths ?? [] } }
+        : {}),
+    },
+    secretAccessKey,
+  )
 
-  const jwt = await signHs256Jwt(claims, secretAccessKey)
   return {
     accessKeyId,
     // R2 expects the S3 secret to be the hex SHA-256 of the grant JWT.

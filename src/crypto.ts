@@ -4,9 +4,11 @@
 
 const encoder = new TextEncoder()
 
-export async function hashSha256(input: string): Promise<string> {
-  return new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(input))).toHex()
-}
+const base64url = (str: string): string => base64urlBytes(encoder.encode(str))
+
+export const toHex = (ab: ArrayBuffer): string => new Uint8Array(ab).toHex()
+export const hashSha256 = async (input: string): Promise<string> =>
+  toHex(await crypto.subtle.digest('SHA-256', encoder.encode(input)))
 
 /** HMAC-SHA256 over `data` with `key` (raw bytes, or a UTF-8 string). */
 export async function hmacSha256(key: ArrayBuffer | string, data: string): Promise<ArrayBuffer> {
@@ -31,10 +33,6 @@ export async function signHs256Jwt(
   const signingInput = `${jwtHeader}.${base64url(JSON.stringify(claims))}`
   const signature = await hmacSha256(secret, signingInput)
   return `${signingInput}.${base64urlBytes(new Uint8Array(signature))}`
-}
-
-function base64url(str: string): string {
-  return base64urlBytes(encoder.encode(str))
 }
 
 function base64urlBytes(bytes: Uint8Array): string {
