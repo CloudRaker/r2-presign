@@ -90,6 +90,16 @@ describe('createR2TempCredentials', () => {
     expect((payload.exp as number) - (payload.iat as number)).toBe(3600)
   })
 
+  it('defaults prefixPaths to [] when only objectPaths provided', async () => {
+    const creds = await createR2TempCredentials({
+      ...parent,
+      scope: 'object-read-only',
+      paths: { objectPaths: ['exact/file.txt'] },
+    })
+    const payload = decodeSegment(jwtFromSessionToken(creds.sessionToken).split('.')[1]!)
+    expect(payload.paths).toEqual({ prefixPaths: [], objectPaths: ['exact/file.txt'] })
+  })
+
   it('throws when required config is missing', async () => {
     // Every field is optional (env fallback); clear one so nothing resolves.
     vi.stubEnv('AWS_SECRET_ACCESS_KEY', '')

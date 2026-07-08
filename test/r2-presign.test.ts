@@ -88,6 +88,14 @@ describe('presignR2 GET', () => {
     expect(params(url)).toEqual(params(ref))
   })
 
+  it('signs X-Amz-Security-Token for PUT with temp credentials, matching aws4fetch', async () => {
+    const sessionToken = 'FQoGZXIvYXdzEExampleSessionToken=='
+    const url = await presignR2('PUT', { ...creds, ttlSeconds: 300, sessionToken })
+    expect(params(url)['X-Amz-Security-Token']).toBe(sessionToken)
+    const ref = await oracle('PUT', params(url)['X-Amz-Date']!, undefined, sessionToken)
+    expect(params(url)).toEqual(params(ref))
+  })
+
   // Guards the crypto independently of aws4fetch, in case the dev oracle is dropped.
   it('emits a well-formed SigV4 query', async () => {
     const url = await presignR2('GET', { ...creds, ttlSeconds: 300 })

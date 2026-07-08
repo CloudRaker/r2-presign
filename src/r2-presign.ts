@@ -9,7 +9,7 @@
  * upload sends that exact Content-Type.
  */
 
-import { hmacSha256, hashSha256, toHex } from './crypto'
+import { hashSha256, hmacSha256 } from './crypto'
 import { hostForAccount, type R2Config, resolveR2Config } from './config'
 
 export interface PresignR2GetOptions extends R2Config {
@@ -25,24 +25,6 @@ export interface PresignR2PutOptions extends PresignR2GetOptions {
    * Omit to leave the uploader free to send any type.
    */
   contentType?: string
-}
-
-interface DeprecatedWrappedUrl {
-  url: string
-}
-
-/**
- * @deprecated use presignR2('PUT', args)
- */
-export async function presignR2Put(args: PresignR2PutOptions): Promise<DeprecatedWrappedUrl> {
-  return { url: await presignR2('PUT', args) }
-}
-
-/**
- * @deprecated use presignR2('GET', args)
- */
-export async function presignR2Get(args: PresignR2GetOptions): Promise<DeprecatedWrappedUrl> {
-  return { url: await presignR2('GET', args) }
 }
 
 export async function presignR2(method: 'GET', options: PresignR2GetOptions): Promise<string>
@@ -79,32 +61,31 @@ export async function presignR2(
     .map((seg) => encodeURIComponent(seg))
     .join('/')}`
   const canonicalPath = rfc3986(path)
+
   const url = new URL(`https://${host}${path}`)
 
   const datetime = new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
   const date = datetime.slice(0, 8)
   const credentialScope = `${date}/auto/s3/aws4_request`
 
-  const queryParams = url.searchParams
-  queryParams.set('X-Amz-Algorithm', 'AWS4-HMAC-SHA256')
-  queryParams.set('X-Amz-Credential', `${accessKeyId}/${credentialScope}`)
-  queryParams.set('X-Amz-Date', datetime)
-  queryParams.set('X-Amz-Expires', String(ttlSeconds))
-  queryParams.set('X-Amz-SignedHeaders', signedHeaderNames)
-  // Temp-credential token is a signed query param, so it's part of the canonical query.
-  if (sessionToken != null) {
-    queryParams.set('X-Amz-Security-Token', sessionToken)
-  }
-
-  const canonicalQuery = [...queryParams]
-    .map(([k, v]): [string, string] => [
-      rfc3986(encodeURIComponent(k)),
-      rfc3986(encodeURIComponent(v)),
-    ])
-    .toSorted((a, b) =>
-      a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0,
-    )
-    .map(([k, v]) => `${k}=${v}`)
+  const canonicalQuery = (
+    [
+      // Order matters! Alphabetic by param key
+      ['X-Amz-Algorithm', 'AWS4-HMAC-SHA256'],
+      ['X-Amz-Credential', `${accessKeyId}/${credentialScope}`],
+      ['X-Amz-Date', datetime],
+      ['X-Amz-Expires', String(ttlSeconds)],
+      ...((sessionToken ? [['X-Amz-Security-Token', sessionToken]] : []) as ReadonlyArray<
+        [string, string]
+      >),
+      ['X-Amz-SignedHeaders', signedHeaderNames],
+    ] as ReadonlyArray<[string, string]>
+  )
+    .map(([k, v]) => {
+      // Side effect set on the URL params
+      url.searchParams.set(k, v)
+      return `${rfc3986(encodeURIComponent(k))}=${rfc3986(encodeURIComponent(v))}`
+    })
     .join('&')
 
   const canonicalRequest = [
@@ -127,9 +108,9 @@ export async function presignR2(
   const kRegion = await hmacSha256(kDate, 'auto')
   const kService = await hmacSha256(kRegion, 's3')
   const kSigning = await hmacSha256(kService, 'aws4_request')
-  const signature = toHex(await hmacSha256(kSigning, stringToSign))
+  const signature = new Uint8Array(await hmacSha256(kSigning, stringToSign)).toHex()
 
-  queryParams.set('X-Amz-Signature', signature)
+  url.searchParams.set('X-Amz-Signature', signature)
   return url.toString()
 }
 
